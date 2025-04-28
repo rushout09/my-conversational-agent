@@ -52,13 +52,21 @@ export function Conversation() {
       <div className="flex flex-col items-center">
         <p>Status: {conversation.status}</p>
         <p>Agent is {conversation.isSpeaking ? 'speaking' : 'listening'}</p>
-        <img
-          src="/base-image.png"
-          alt="Kanhaji"
-          className={`transition-transform duration-500 ${
-            conversation.isSpeaking ? 'scale-110' : 'scale-100'
-          }`}
-        />
+        {conversation.isSpeaking ? (
+          <video
+            src="/base-video.mp4"
+            autoPlay
+            loop
+            muted
+            className="transition-transform duration-500 max-w-full max-h-screen"
+          />
+        ) : (
+          <img
+            src="/base-image2.png"
+            alt="Kanhaji"
+            className="transition-transform duration-500 max-w-full max-h-screen"
+          />
+        )}
       </div>
     </div>
   );
