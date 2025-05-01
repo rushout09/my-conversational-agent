@@ -1,18 +1,17 @@
 'use client';
-
-import { useConversation } from '@11labs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function Conversation() {
-  const conversation = useConversation({
-    onConnect: () => console.log('Connected'),
-    onDisconnect: () => console.log('Disconnected'),
-    onMessage: (message) => console.log('Message:', message),
-    onError: (error) => console.error('Error:', error),
-  });
+  // Initialize the conversation object
 
   const webcamRef = useRef<HTMLVideoElement>(null);
   const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+
+  // New state for OpenAI Realtime
+  const [pc, setPc] = useState<RTCPeerConnection | null>(null);
+  const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null);
+  const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Get webcam stream
   useEffect(() => {
@@ -37,33 +36,88 @@ export function Conversation() {
   }, []);
 
   const startConversation = useCallback(async () => {
+    setStatus('connecting');
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-      await conversation.startSession({
-        agentId: 'tp2ih3IGCDc2pctLH67x', // Replace with your agent ID
+      // Get ephemeral key
+      const tokenResponse = await fetch("/api/session");
+      const data = await tokenResponse.json();
+      const EPHEMERAL_KEY = data.client_secret.value;
+
+      // Create peer connection
+      const newPc = new RTCPeerConnection();
+
+      // Play remote audio
+      const audioEl = document.createElement("audio");
+      audioEl.autoplay = true;
+      newPc.ontrack = e => {
+        audioEl.srcObject = e.streams[0];
+        setIsSpeaking(true);
+        // Optionally, listen for silence to setIsSpeaking(false)
+      };
+
+      // Add local audio track
+      const ms = await navigator.mediaDevices.getUserMedia({ audio: true });
+      newPc.addTrack(ms.getTracks()[0]);
+
+      // Data channel for events
+      const dc = newPc.createDataChannel("oai-events");
+      dc.addEventListener("message", (e) => {
+        // Handle server events here
+        console.log(e);
       });
+      setDataChannel(dc);
+
+      // SDP offer/answer
+      const offer = await newPc.createOffer();
+      await newPc.setLocalDescription(offer);
+
+      const baseUrl = "https://api.openai.com/v1/realtime";
+      const model = "gpt-4o-realtime-preview-2024-12-17";
+      const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+        method: "POST",
+        body: offer.sdp,
+        headers: {
+          Authorization: `Bearer ${EPHEMERAL_KEY}`,
+          "Content-Type": "application/sdp"
+        },
+      });
+
+      const answer: RTCSessionDescriptionInit = {
+        type: "answer",
+        sdp: await sdpResponse.text(),
+      };
+      await newPc.setRemoteDescription(answer);
+
+      setPc(newPc);
+      setStatus('connected');
     } catch (error) {
+      setStatus('disconnected');
       console.error('Failed to start conversation:', error);
     }
-  }, [conversation]);
+  }, []);
 
+  // Stop session
   const stopConversation = useCallback(async () => {
-    await conversation.endSession();
-  }, [conversation]);
-
+    if (pc) {
+      pc.close();
+      setPc(null);
+      setStatus('disconnected');
+      setIsSpeaking(false);
+    }
+  }, [pc]);
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="flex gap-2">
         <button
           onClick={startConversation}
-          disabled={conversation.status === 'connected'}
+          disabled={status === 'connected' || status === 'connecting'}
           className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
         >
           Start Conversation
         </button>
         <button
           onClick={stopConversation}
-          disabled={conversation.status !== 'connected'}
+          disabled={status !== 'connected'}
           className="px-4 py-2 bg-red-500 text-white rounded disabled:bg-gray-300"
         >
           Stop Conversation
@@ -85,7 +139,7 @@ export function Conversation() {
         {/* Agent Video or Image */}
         <div className="border p-4">
           <p className="text-center mb-2 text-lg">Agent</p>
-          {conversation.isSpeaking ? (
+          {isSpeaking ? (
             <video
               src="/base-video.mp4"
               autoPlay
@@ -106,8 +160,7 @@ export function Conversation() {
       </div>
 
       <div className="mt-4 text-center">
-        <p>Status: {conversation.status}</p>
-        <p>Agent is {conversation.isSpeaking ? 'speaking' : 'listening'}</p>
+        <p>Status: {status}</p>
       </div>
     </div>
   );
