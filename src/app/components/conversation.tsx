@@ -1,7 +1,7 @@
 'use client';
 
 import { useConversation } from '@11labs/react';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function Conversation() {
   const conversation = useConversation({
@@ -11,16 +11,37 @@ export function Conversation() {
     onError: (error) => console.error('Error:', error),
   });
 
+  const webcamRef = useRef<HTMLVideoElement>(null);
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+
+  // Get webcam stream
+  useEffect(() => {
+    async function enableWebcam() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        if (webcamRef.current) {
+          webcamRef.current.srcObject = stream;
+        }
+        setWebcamStream(stream);
+      } catch (err) {
+        console.error('Error accessing webcam:', err);
+      }
+    }
+
+    enableWebcam();
+
+    return () => {
+      // Clean up the stream on unmount
+      webcamStream?.getTracks().forEach(track => track.stop());
+    };
+  }, []);
+
   const startConversation = useCallback(async () => {
     try {
-      // Request microphone permission
       await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // Start the conversation with your agent
       await conversation.startSession({
         agentId: 'tp2ih3IGCDc2pctLH67x', // Replace with your agent ID
       });
-
     } catch (error) {
       console.error('Failed to start conversation:', error);
     }
@@ -49,24 +70,44 @@ export function Conversation() {
         </button>
       </div>
 
-      <div className="flex flex-col items-center">
+      <div className="flex gap-6 mt-8 flex-wrap justify-center">
+        {/* User's Webcam */}
+        <div className="border p-4">
+          <p className="text-center mb-2 text-lg">Your Camera</p>
+          <video
+            ref={webcamRef}
+            autoPlay
+            muted
+            className="w-96 h-72 object-cover rounded"
+          />
+        </div>
+
+        {/* Agent Video or Image */}
+        <div className="border p-4">
+          <p className="text-center mb-2 text-lg">Agent</p>
+          {conversation.isSpeaking ? (
+            <video
+              src="/base-video.mp4"
+              autoPlay
+              loop
+              muted
+              className="w-96 h-72 object-cover rounded"
+              style={{ objectPosition: 'center 25%' }}
+            />
+          ) : (
+            <img
+              src="/base-image2.png"
+              alt="Kanhaji"
+              className="w-96 h-72 object-cover rounded"
+              style={{ objectPosition: 'center 25%' }}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 text-center">
         <p>Status: {conversation.status}</p>
         <p>Agent is {conversation.isSpeaking ? 'speaking' : 'listening'}</p>
-        {conversation.isSpeaking ? (
-          <video
-            src="/base-video.mp4"
-            autoPlay
-            loop
-            muted
-            className="transition-transform duration-500 max-w-full max-h-screen"
-          />
-        ) : (
-          <img
-            src="/base-image2.png"
-            alt="Kanhaji"
-            className="transition-transform duration-500 max-w-full max-h-screen"
-          />
-        )}
       </div>
     </div>
   );
