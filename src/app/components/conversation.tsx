@@ -1,27 +1,31 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 
 export function Conversation() {
   // Initialize the conversation object
 
   const webcamRef = useRef<HTMLVideoElement>(null);
-  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+  // Remove unused webcamStream state to fix lint error
+  // const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
 
   // New state for OpenAI Realtime
   const [pc, setPc] = useState<RTCPeerConnection | null>(null);
-  const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null);
+  // Removed unused dataChannel state
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   // Get webcam stream
   useEffect(() => {
+    let activeStream: MediaStream | null = null;
     async function enableWebcam() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        activeStream = stream;
         if (webcamRef.current) {
           webcamRef.current.srcObject = stream;
         }
-        setWebcamStream(stream);
+        // setWebcamStream(stream); // Remove unused state update
       } catch (err) {
         console.error('Error accessing webcam:', err);
       }
@@ -31,9 +35,9 @@ export function Conversation() {
 
     return () => {
       // Clean up the stream on unmount
-      webcamStream?.getTracks().forEach(track => track.stop());
+      activeStream?.getTracks().forEach(track => track.stop());
     };
-  }, []);
+  }, []); // Intentionally omitting webcamStream from deps to avoid infinite loop
 
   const startConversation = useCallback(async () => {
     setStatus('connecting');
@@ -65,7 +69,7 @@ export function Conversation() {
         // Handle server events here
         console.log(e);
       });
-      setDataChannel(dc);
+      // No setDataChannel(dc) since dataChannel state is removed
 
       // SDP offer/answer
       const offer = await newPc.createOffer();
@@ -149,11 +153,14 @@ export function Conversation() {
               style={{ objectPosition: 'center 25%' }}
             />
           ) : (
-            <img
+            <Image
               src="/base-image2.png"
               alt="Kanhaji"
+              width={384}
+              height={288}
               className="w-96 h-72 object-cover rounded"
               style={{ objectPosition: 'center 25%' }}
+              priority
             />
           )}
         </div>
