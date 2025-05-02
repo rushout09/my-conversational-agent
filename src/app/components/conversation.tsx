@@ -1,31 +1,128 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 
 export function Conversation() {
   // Initialize the conversation object
 
   const webcamRef = useRef<HTMLVideoElement>(null);
-  // Remove unused webcamStream state to fix lint error
-  // const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
+
+  const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
+  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const agentVideoRef = useRef<HTMLVideoElement>(null); // For agent video playback
+  const agentAudioStreamRef = useRef<MediaStream | null>(null);
 
   // New state for OpenAI Realtime
   const [pc, setPc] = useState<RTCPeerConnection | null>(null);
-  // Removed unused dataChannel state
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  const agentVideoRef = useRef<HTMLVideoElement>(null);
+  async function mixAudioStreams(userStream: MediaStream, agentStream: MediaStream): Promise<MediaStream> {
+    const audioContext = new AudioContext();
+    const destination = audioContext.createMediaStreamDestination();
 
-  useEffect(() => {
-    if (agentVideoRef.current) {
-      if (isSpeaking) {
-        agentVideoRef.current.play();
-      } else {
-        agentVideoRef.current.pause();
-      }
+    // User audio
+    const userSource = audioContext.createMediaStreamSource(userStream);
+    userSource.connect(destination);
+
+    // Agent audio
+    const agentSource = audioContext.createMediaStreamSource(agentStream);
+    agentSource.connect(destination);
+
+    return destination.stream;
+  }
+
+  // Start recording
+  const startRecording = async () => {
+    // 1. Get user video/audio stream
+    const userStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+    // 2. Get agent video element and remote audio stream
+    const agentAudioStream = agentAudioStreamRef.current;
+    if (!agentAudioStream) {
+      alert("Agent audio not available yet!");
+      return;
     }
-  }, [isSpeaking]);
+
+    // 3. Set up canvas to combine videos
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = 1280; // Example width
+    canvas.height = 720; // Example height
+
+    // Draw videos to canvas
+    let animationFrameId: number;
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (webcamRef.current && webcamRef.current.readyState >= 2) {
+        ctx.drawImage(webcamRef.current, 0, 0, 640, 720); // User video
+      }
+      
+      if (agentVideoRef.current && agentVideoRef.current.readyState >= 2) {
+        ctx.drawImage(agentVideoRef.current, 640, 0, 640, 720); // Agent video
+      }
+      animationFrameId = requestAnimationFrame(draw);
+    }
+    draw();
+
+    // 4. Get video stream from canvas
+    const canvasStream = canvas.captureStream(30);
+
+    // 5. Mix audio
+    const mixedAudioStream = await mixAudioStreams(userStream, agentAudioStream);
+
+    // 6. Combine video and audio
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...mixedAudioStream.getAudioTracks(),
+    ]);
+
+    // 7. Start MediaRecorder
+    const localChunks: Blob[] = [];
+    setRecordedChunks([]); // clear state before recording
+
+    const mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm; codecs=vp9,opus' });
+    setRecorder(mediaRecorder);
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        localChunks.push(e.data);
+        setRecordedChunks(prev => [...prev, e.data]);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      // Cancel animation frame
+      cancelAnimationFrame(animationFrameId);
+
+      // Use localChunks to ensure we have all data
+      const allChunks = localChunks.length > 0 ? localChunks : recordedChunks;
+      if (allChunks.length === 0) {
+        alert("No data was recorded.");
+        setDownloadUrl(null);
+        return;
+      }
+      const blob = new Blob(allChunks, { type: 'video/webm' });
+      if (blob.size === 0) {
+        alert("Recorded file is empty.");
+        setDownloadUrl(null);
+        return;
+      }
+      setDownloadUrl(URL.createObjectURL(blob));
+      uploadRecording(blob).catch(console.error);
+    };
+
+    mediaRecorder.start(100); // Use timeslice to ensure ondataavailable is called periodically
+  };
+
+  // Stop recording
+  const stopRecording = () => {
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  };
 
   // Get webcam stream
   useEffect(() => {
@@ -37,7 +134,6 @@ export function Conversation() {
         if (webcamRef.current) {
           webcamRef.current.srcObject = stream;
         }
-        // setWebcamStream(stream); // Remove unused state update
       } catch (err) {
         console.error('Error accessing webcam:', err);
       }
@@ -49,8 +145,28 @@ export function Conversation() {
       // Clean up the stream on unmount
       activeStream?.getTracks().forEach(track => track.stop());
     };
-  }, []); // Intentionally omitting webcamStream from deps to avoid infinite loop
+  }, []);
 
+  async function uploadRecording(blob: Blob) {
+    const formData = new FormData();
+    formData.append('file', blob, 'conversation.webm');
+  
+    // Use fetch to POST to your API route
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: blob, // send raw blob, since API expects stream
+      headers: {
+        'Content-Type': 'video/webm',
+      },
+    });
+  
+    if (!res.ok) {
+      throw new Error('Failed to upload');
+    }
+    return res.json();
+  }
+
+  // Modified: Start recording when starting conversation
   const startConversation = useCallback(async () => {
     setStatus('connecting');
     try {
@@ -73,6 +189,7 @@ export function Conversation() {
       audioEl.autoplay = true;
       newPc.ontrack = e => {
         audioEl.srcObject = e.streams[0];
+        agentAudioStreamRef.current = e.streams[0];
 
         // Listen for silence to setIsSpeaking(false)
         if (audioEl.srcObject instanceof MediaStream) {
@@ -143,9 +260,8 @@ export function Conversation() {
             session: {
               voice: "alloy",
               instructions: "Aapka naam krishna hai. Aap sirf Hindi mein baat karte hai. Aap ek jigyasi bande se baat kar rahe.",
-              input_audio_noise_reduction: null, // far_field if audio is from laptop mic, "near_field"  if audio is from headphones.
+              input_audio_noise_reduction: null,
               temperature: 0.8
-              // Add any other config fields as needed
             }
           };
           dc.send(JSON.stringify(updateEvent));
@@ -158,14 +274,13 @@ export function Conversation() {
             type: "response.create",
             response: {
               modalities: ["audio", "text"],
-              instructions: "Aap balak se uska naam puch k conversation ki shurwat kijiye", // Customize as needed
+              instructions: "Aap balak se uska naam puch k conversation ki shurwat kijiye",
               max_output_tokens: 100
             }
           };
           dc.send(JSON.stringify(initialMessage));
         }
       });
-      // No setDataChannel(dc) since dataChannel state is removed
 
       // SDP offer/answer
       const offer = await newPc.createOffer();
@@ -189,21 +304,26 @@ export function Conversation() {
       await newPc.setRemoteDescription(answer);
 
       setPc(newPc);
+
+      // Start recording when session starts
+      await startRecording();
     } catch (error) {
       setStatus('disconnected');
       console.error('Failed to start conversation:', error);
     }
-  }, []);
+  }, [startRecording]);
 
-  // Stop session
+  // Modified: Stop recording when stopping conversation
   const stopConversation = useCallback(async () => {
     if (pc) {
       pc.close();
       setPc(null);
       setStatus('disconnected');
       setIsSpeaking(false);
+      stopRecording();
     }
-  }, [pc]);
+  }, [pc, stopRecording]);
+
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="flex gap-2">
@@ -240,11 +360,12 @@ export function Conversation() {
           <p className="text-center mb-2 text-lg">Agent</p>
           <video
             ref={agentVideoRef}
-            src="/base-video.mp4"
+            src={isSpeaking ? "/base-video.mp4" : "/base-video-2.mp4"}
+            autoPlay
             loop
             muted
             className="w-96 h-72 object-cover rounded"
-            style={{ objectPosition: 'center 25%' }}
+            style={{ objectPosition: 'center 25%', display: 'block' }}
           />
         </div>
       </div>
@@ -252,6 +373,12 @@ export function Conversation() {
       <div className="mt-4 text-center">
         <p>Status: {status}</p>
       </div>
+
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+      {downloadUrl && (
+        <a href={downloadUrl} download="conversation.webm">Download Conversation</a>
+      )}
     </div>
   );
 }
