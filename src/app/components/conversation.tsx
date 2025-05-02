@@ -1,6 +1,5 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 
 export function Conversation() {
   // Initialize the conversation object
@@ -81,7 +80,7 @@ export function Conversation() {
     ]);
 
     // 7. Start MediaRecorder
-    let localChunks: Blob[] = [];
+    const localChunks: Blob[] = [];
     setRecordedChunks([]); // clear state before recording
 
     const mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm; codecs=vp9,opus' });
@@ -112,6 +111,7 @@ export function Conversation() {
         return;
       }
       setDownloadUrl(URL.createObjectURL(blob));
+      uploadRecording(blob).catch(console.error);
     };
 
     mediaRecorder.start(100); // Use timeslice to ensure ondataavailable is called periodically
@@ -146,6 +146,25 @@ export function Conversation() {
       activeStream?.getTracks().forEach(track => track.stop());
     };
   }, []);
+
+  async function uploadRecording(blob: Blob) {
+    const formData = new FormData();
+    formData.append('file', blob, 'conversation.webm');
+  
+    // Use fetch to POST to your API route
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: blob, // send raw blob, since API expects stream
+      headers: {
+        'Content-Type': 'video/webm',
+      },
+    });
+  
+    if (!res.ok) {
+      throw new Error('Failed to upload');
+    }
+    return res.json();
+  }
 
   // Modified: Start recording when starting conversation
   const startConversation = useCallback(async () => {
