@@ -58,7 +58,8 @@ export function Conversation() {
 
         // Listen for silence to setIsSpeaking(false)
         if (audioEl.srcObject instanceof MediaStream) {
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          const audioContext = new AudioContextClass();
           const source = audioContext.createMediaStreamSource(audioEl.srcObject);
           const analyser = audioContext.createAnalyser();
           analyser.fftSize = 2048;
