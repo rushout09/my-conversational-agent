@@ -110,7 +110,10 @@ export function Conversation() {
         let msg;
         try {
           msg = JSON.parse(e.data);
-        } catch {
+          console.log(msg.type);
+          console.log(msg);
+        } catch (error) {
+          console.error('Error parsing message:', error);
           return;
         }
         // Handle session.created event
@@ -132,6 +135,15 @@ export function Conversation() {
         if (msg.type === "session.updated") {
           console.log("Session updated:", msg.session);
           setStatus('connected');
+          const initialMessage = {
+            type: "response.create",
+            response: {
+              modalities: ["audio", "text"],
+              instructions: "Aap balak se uska naam puch k conversation ki shurwat kijiye", // Customize as needed
+              max_output_tokens: 100
+            }
+          };
+          dc.send(JSON.stringify(initialMessage));
         }
       });
       // No setDataChannel(dc) since dataChannel state is removed
