@@ -15,6 +15,18 @@ export function Conversation() {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [isSpeaking, setIsSpeaking] = useState(false);
 
+  const agentVideoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (agentVideoRef.current) {
+      if (isSpeaking) {
+        agentVideoRef.current.play();
+      } else {
+        agentVideoRef.current.pause();
+      }
+    }
+  }, [isSpeaking]);
+
   // Get webcam stream
   useEffect(() => {
     let activeStream: MediaStream | null = null;
@@ -45,6 +57,12 @@ export function Conversation() {
       // Get ephemeral key
       const tokenResponse = await fetch("/api/session");
       const data = await tokenResponse.json();
+      console.log("Session API response:", data);
+      if (!data.client_secret || !data.client_secret.value) {
+        alert("Failed to get session key from OpenAI. Please check your API key and try again.\nResponse: " + JSON.stringify(data));
+        setStatus('disconnected');
+        return;
+      }
       const EPHEMERAL_KEY = data.client_secret.value;
 
       // Create peer connection
@@ -220,26 +238,14 @@ export function Conversation() {
         {/* Agent Video or Image */}
         <div className="border p-4">
           <p className="text-center mb-2 text-lg">Agent</p>
-          {isSpeaking ? (
-            <video
-              src="/base-video.mp4"
-              autoPlay
-              loop
-              muted
-              className="w-96 h-72 object-cover rounded"
-              style={{ objectPosition: 'center 25%' }}
-            />
-          ) : (
-            <Image
-              src="/base-image2.png"
-              alt="Kanhaji"
-              width={384}
-              height={288}
-              className="w-96 h-72 object-cover rounded"
-              style={{ objectPosition: 'center 25%' }}
-              priority
-            />
-          )}
+          <video
+            ref={agentVideoRef}
+            src="/base-video.mp4"
+            loop
+            muted
+            className="w-96 h-72 object-cover rounded"
+            style={{ objectPosition: 'center 25%' }}
+          />
         </div>
       </div>
 
