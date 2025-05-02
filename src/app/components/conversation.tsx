@@ -55,8 +55,48 @@ export function Conversation() {
       audioEl.autoplay = true;
       newPc.ontrack = e => {
         audioEl.srcObject = e.streams[0];
-        setIsSpeaking(true);
-        // Optionally, listen for silence to setIsSpeaking(false)
+
+        // Listen for silence to setIsSpeaking(false)
+        if (audioEl.srcObject instanceof MediaStream) {
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(audioEl.srcObject);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 2048;
+          source.connect(analyser);
+
+          let silenceTimeout: NodeJS.Timeout | null = null;
+
+          const checkSilence = () => {
+            const data = new Uint8Array(analyser.fftSize);
+            analyser.getByteTimeDomainData(data);
+
+            // Calculate RMS (root mean square) to detect volume
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) {
+              const val = (data[i] - 128) / 128;
+              sum += val * val;
+            }
+            const rms = Math.sqrt(sum / data.length);
+
+            if (rms < 0.02) { // Threshold for silence
+              if (!silenceTimeout) {
+                silenceTimeout = setTimeout(() => {
+                  setIsSpeaking(false);
+                }, 1000); // 1 second of silence
+              }
+            } else {
+              if (silenceTimeout) {
+                clearTimeout(silenceTimeout);
+                silenceTimeout = null;
+              }
+              if (!isSpeaking) setIsSpeaking(true);
+            }
+
+            requestAnimationFrame(checkSilence);
+          };
+
+          checkSilence();
+        }
       };
 
       // Add local audio track
