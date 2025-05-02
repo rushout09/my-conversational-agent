@@ -66,8 +66,33 @@ export function Conversation() {
       // Data channel for events
       const dc = newPc.createDataChannel("oai-events");
       dc.addEventListener("message", (e) => {
-        // Handle server events here
-        console.log(e);
+        // Parse the incoming message
+        let msg;
+        try {
+          msg = JSON.parse(e.data);
+        } catch {
+          return;
+        }
+        // Handle session.created event
+        if (msg.type === "session.created") {
+          // Send session.update with your configuration
+          const updateEvent = {
+            type: "session.update",
+            session: {
+              voice: "alloy",
+              instructions: "Aapka naam krishna hai. Aap sirf Hindi mein baat karte hai. Aap ek jigyasi bande se baat kar rahe.",
+              input_audio_noise_reduction: null, // far_field if audio is from laptop mic, "near_field"  if audio is from headphones.
+              temperature: 0.8
+              // Add any other config fields as needed
+            }
+          };
+          dc.send(JSON.stringify(updateEvent));
+        }
+        // Handle session.updated event
+        if (msg.type === "session.updated") {
+          console.log("Session updated:", msg.session);
+          setStatus('connected');
+        }
       });
       // No setDataChannel(dc) since dataChannel state is removed
 
@@ -93,7 +118,6 @@ export function Conversation() {
       await newPc.setRemoteDescription(answer);
 
       setPc(newPc);
-      setStatus('connected');
     } catch (error) {
       setStatus('disconnected');
       console.error('Failed to start conversation:', error);
