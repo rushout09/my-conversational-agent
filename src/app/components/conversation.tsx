@@ -19,7 +19,25 @@ export function Conversation() {
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  async function mixAudioStreams(userStream: MediaStream, agentStream: MediaStream): Promise<MediaStream> {
+  // --- Play/pause agent video based on isSpeaking ---
+  useEffect(() => {
+    const video = agentVideoRef.current;
+    if (!video) return;
+    if (isSpeaking) {
+      // Play if not already playing
+      if (video.paused) {
+        video.play().catch(() => {});
+      }
+    } else {
+      // Pause and keep frame visible
+      if (!video.paused) {
+        video.pause();
+      }
+    }
+  }, [isSpeaking]);
+  // --------------------------------------------------
+
+  const mixAudioStreams = useCallback(async (userStream: MediaStream, agentStream: MediaStream): Promise<MediaStream> => {
     const audioContext = new AudioContext();
     const destination = audioContext.createMediaStreamDestination();
 
@@ -32,10 +50,10 @@ export function Conversation() {
     agentSource.connect(destination);
 
     return destination.stream;
-  }
+  }, []);
 
   // Start recording
-  const startRecording = async () => {
+  const startRecording = useCallback(async () => {
     // 1. Get user video/audio stream
     const userStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 
@@ -115,14 +133,14 @@ export function Conversation() {
     };
 
     mediaRecorder.start(100); // Use timeslice to ensure ondataavailable is called periodically
-  };
+  }, [mixAudioStreams, recordedChunks]);
 
   // Stop recording
-  const stopRecording = () => {
+  const stopRecording = useCallback(() => {
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
     }
-  };
+  }, [recorder]);
 
   // Get webcam stream
   useEffect(() => {
@@ -225,7 +243,7 @@ export function Conversation() {
                 clearTimeout(silenceTimeout);
                 silenceTimeout = null;
               }
-              if (!isSpeaking) setIsSpeaking(true);
+              setIsSpeaking(true);
             }
 
             requestAnimationFrame(checkSilence);
@@ -360,7 +378,7 @@ export function Conversation() {
           <p className="text-center mb-2 text-lg">Agent</p>
           <video
             ref={agentVideoRef}
-            src={isSpeaking ? "/base-video.mp4" : "/base-video-2.mp4"}
+            src="/base-video.mp4" 
             autoPlay
             loop
             muted
@@ -377,7 +395,13 @@ export function Conversation() {
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
       {downloadUrl && (
-        <a href={downloadUrl} download="conversation.webm">Download Conversation</a>
+        <a
+          href={downloadUrl}
+          download="conversation.webm"
+          className="inline-block mt-4 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded shadow transition-colors duration-200"
+        >
+          Download Conversation
+        </a>
       )}
     </div>
   );
