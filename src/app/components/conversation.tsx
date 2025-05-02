@@ -379,7 +379,6 @@ export function Conversation() {
           <video
             ref={agentVideoRef}
             src="/base-video.mp4" 
-            autoPlay
             loop
             muted
             className="w-96 h-72 object-cover rounded"
