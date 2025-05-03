@@ -67,19 +67,38 @@ export function Conversation() {
     // 3. Set up canvas to combine videos
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 1280; // Example width
-    canvas.height = 720; // Example height
+
+    // Get agent video dimensions for aspect ratio
+    let agentWidth = 1280;
+    let agentHeight = 720;
+    if (agentVideoRef.current) {
+      agentWidth = agentVideoRef.current.videoWidth || agentWidth;
+      agentHeight = agentVideoRef.current.videoHeight || agentHeight;
+    }
+    canvas.width = agentWidth;
+    canvas.height = agentHeight;
 
     // Draw videos to canvas
     let animationFrameId: number;
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (webcamRef.current && webcamRef.current.readyState >= 2) {
-        ctx.drawImage(webcamRef.current, 0, 0, 640, 720); // User video
-      }
-      
+      // Draw agent video at its natural aspect ratio, filling the canvas
       if (agentVideoRef.current && agentVideoRef.current.readyState >= 2) {
-        ctx.drawImage(agentVideoRef.current, 640, 0, 640, 720); // Agent video
+        ctx.drawImage(agentVideoRef.current, 0, 0, canvas.width, canvas.height);
+      }
+      // Draw user video as overlay in the corner (keep aspect ratio)
+      if (webcamRef.current && webcamRef.current.readyState >= 2) {
+        // Overlay size and position (bottom right)
+        const overlayWidth = canvas.width * 0.25;
+        const overlayHeight = canvas.height * 0.25;
+        const x = canvas.width - overlayWidth - 32;
+        const y = canvas.height - overlayHeight - 32;
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x, y, overlayWidth, overlayHeight, 16);
+        ctx.clip();
+        ctx.drawImage(webcamRef.current, x, y, overlayWidth, overlayHeight);
+        ctx.restore();
       }
       animationFrameId = requestAnimationFrame(draw);
     }
@@ -342,91 +361,141 @@ export function Conversation() {
     }
   }, [pc, stopRecording]);
 
+  // --- Fullscreen, responsive, scalable overlays and agent video ---
   return (
-    <div className="flex flex-col items-center gap-4 w-full">
-      <div className="flex gap-2">
-        <button
-          onClick={startConversation}
-          disabled={status === 'connected' || status === 'connecting'}
-          className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
-        >
-          Start Conversation
-        </button>
-        <button
-          onClick={stopConversation}
-          disabled={status !== 'connected'}
-          className="px-4 py-2 bg-red-500 text-white rounded disabled:bg-gray-300"
-        >
-          Stop Conversation
-        </button>
-      </div>
-
-      {/* Responsive video area */}
-      <div className="w-full flex justify-center mt-4">
-        <div
-          className="
-            relative
-            w-full
-            max-w-[90vw]
-            sm:max-w-[480px]
-            md:max-w-[640px]
-            lg:max-w-[800px]
-            xl:max-w-[960px]
-            aspect-video
-            rounded
-            overflow-hidden
-            bg-black
-          "
-        >
-          {/* Agent Video (main background) */}
+    <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center w-screen h-screen">
+      {/* Video area */}
+      <div className="relative w-full h-full flex-1 flex items-center justify-center overflow-hidden">
+        {/* Agent Video (main background, original aspect ratio, centered, responsive) */}
+        <div className="absolute inset-0 flex items-center justify-center bg-black z-0">
           <video
             ref={agentVideoRef}
             src="/base-video.mp4"
             loop
             muted
-            className="w-full h-full object-cover rounded"
-            style={{ objectPosition: 'center 20%', display: 'block' }}
-          />
-          {/* User Video Overlay (always in the corner) */}
-          <div
             className="
-              absolute
-              bottom-2 right-2
-              w-[28vw] h-[21vw]
-              min-w-[80px] min-h-[60px]
-              max-w-[160px] max-h-[120px]
-              sm:w-[120px] sm:h-[90px]
-              md:w-[160px] md:h-[120px]
-              lg:w-[180px] lg:h-[135px]
-              xl:w-[200px] xl:h-[150px]
-              "
+              w-full h-full
+              max-w-full max-h-full
+              object-contain
+              bg-black
+              transition-all
+              duration-300
+            "
+            style={{
+              objectFit: 'contain',
+              objectPosition: 'center',
+              display: 'block',
+              background: 'black',
+              zIndex: 1,
+            }}
+          />
+        </div>
+        {/* User Video Overlay (bottom right corner, responsive) */}
+        <video
+          ref={webcamRef}
+          autoPlay
+          muted
+          className="
+            absolute
+            bottom-[4vw] right-[4vw]
+            w-[22vw] h-[16vw]
+            min-w-[80px] min-h-[60px]
+            max-w-[320px] max-h-[240px]
+            rounded-lg shadow-lg border-4 border-white
+            object-cover
+            z-10
+            transition-all
+            duration-300
+            sm:w-[18vw] sm:h-[13vw]
+            md:w-[14vw] md:h-[10vw]
+            lg:w-[12vw] lg:h-[9vw]
+            xl:w-[10vw] xl:h-[7vw]
+          "
+          style={{ objectPosition: 'center 10%', display: 'block' }}
+        />
+        {/* Status indicator (responsive, bottom left) */}
+        <div
+          className="
+            absolute
+            bottom-[4vw] left-[4vw]
+            bg-black/60 text-white
+            px-3 py-2
+            sm:px-4 sm:py-2
+            md:px-6 md:py-3
+            rounded-lg
+            text-sm sm:text-base md:text-lg
+            font-medium shadow
+            z-20
+            transition-all
+            duration-300
+          "
+        >
+          {status}
+        </div>
+        {/* Floating controls (responsive, bottom center) */}
+        <div
+          className="
+            absolute
+            bottom-[4vw] left-1/2
+            -translate-x-1/2
+            flex flex-wrap gap-4
+            z-20
+            px-2
+          "
+        >
+          <button
+            onClick={startConversation}
+            disabled={status === 'connected' || status === 'connecting'}
+            className="
+              px-4 py-2
+              sm:px-6 sm:py-3
+              md:px-8 md:py-4
+              bg-blue-600 text-white rounded-lg
+              text-base sm:text-lg md:text-xl
+              font-semibold shadow
+              disabled:bg-gray-400
+              transition
+            "
           >
-            <video
-              ref={webcamRef}
-              autoPlay
-              muted
-              className="w-full h-full object-cover rounded shadow-lg border-2 border-white"
-              style={{ objectPosition: 'center 10%', display: 'block' }}
-            />
-          </div>
+            Start
+          </button>
+          <button
+            onClick={stopConversation}
+            disabled={status !== 'connected'}
+            className="
+              px-4 py-2
+              sm:px-6 sm:py-3
+              md:px-8 md:py-4
+              bg-red-600 text-white rounded-lg
+              text-base sm:text-lg md:text-xl
+              font-semibold shadow
+              disabled:bg-gray-400
+              transition
+            "
+          >
+            Stop
+          </button>
+          {downloadUrl && (
+            <a
+              href={downloadUrl}
+              download="conversation.webm"
+              className="
+                px-4 py-2
+                sm:px-6 sm:py-3
+                md:px-8 md:py-4
+                bg-green-600 hover:bg-green-700
+                text-white font-semibold rounded-lg shadow
+                transition-colors duration-200
+                text-base sm:text-lg md:text-xl
+              "
+            >
+              Download
+            </a>
+          )}
         </div>
       </div>
-
-      <div className="mt-4 text-center">
-        <p>Status: {status}</p>
-      </div>
-
+      {/* Hidden canvas for recording */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-      {downloadUrl && (
-        <a
-          href={downloadUrl}
-          download="conversation.webm"
-          className="inline-block mt-4 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded shadow transition-colors duration-200"
-        >
-          Download Conversation
-        </a>
-      )}
     </div>
   );
 }
