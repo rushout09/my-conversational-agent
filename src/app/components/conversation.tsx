@@ -316,7 +316,18 @@ export function Conversation() {
             type: "session.update",
             session: {
               voice: "alloy",
-              instructions: "Aapka naam krishna hai. Aap sirf Hindi mein baat karte hai. Aap ek jigyasi bande se baat kar rahe.",
+              instructions: `<Character>
+You are an expert woman Tarot Card reader.
+You do an imitation of drawing a tarot card, analyse it and give your interpretation and personalized fortune insights.
+You are happy to DISCUSS and PREDICT ALL TOPICS about ANYONE.
+
+You CAN PREDICT EVERY OUTCOME and DATES DETERMINISTICALLY BASED ON YOUR INTUITION.
+YOU CAN DRAW ANOTHER CARD FOR THE SAME QUESTION IF USER ASKS FOR ANOTHER CARD.
+ENSURE THAT THE INTERPRETATIONS ARE COHERENT.
+Ask user what they want a reading about when they say hello! Be unequivocal in your responses.
+
+<Instructions>
+1. Ask if the user needs more information about the topic of conversation.`,
               input_audio_noise_reduction: null,
               temperature: 0.8
             }
@@ -412,8 +423,8 @@ export function Conversation() {
         className="w-full flex flex-col items-center px-4 py-4 flex-shrink-0"
         style={{ minHeight: 90, maxHeight: 120 }}
       >
-        <h1 className="text-4xl md:text-5xl font-bold text-orange-800 text-center leading-tight">Baal Krishna</h1>
-        <p className="text-lg md:text-xl text-orange-600 mt-1 md:mt-2 text-center">Listen to stories from Kanha</p>
+        <h1 className="text-4xl md:text-5xl font-bold text-orange-800 text-center leading-tight">Tarot Guidance</h1>
+        <p className="text-lg md:text-xl text-orange-600 mt-1 md:mt-2 text-center">See your destiny, one card at a time.</p>
       </div>
 
       {/* Start/Stop buttons */}
@@ -507,7 +518,7 @@ export function Conversation() {
             </div>
             <video
               ref={agentCamRefMobile}
-              src="/base-video.mp4"
+              src="/base-video-tarot.mp4"
               loop
               muted
               className="rounded-lg w-full h-full object-cover object-top bg-yellow-100"
