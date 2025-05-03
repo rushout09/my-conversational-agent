@@ -344,7 +344,7 @@ export function Conversation() {
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-    <div className="flex gap-2">
+      <div className="flex gap-2">
         <button
           onClick={startConversation}
           disabled={status === 'connected' || status === 'connecting'}
@@ -361,45 +361,72 @@ export function Conversation() {
         </button>
       </div>
 
+      {/* Responsive video area */}
       <div className="w-full flex justify-center mt-4">
-  <div className="relative w-full max-w-3xl aspect-[1/1]">
-    {/* Agent Video (main background) */}
-    <video
-      ref={agentVideoRef}
-      src="/base-video.mp4"
-      loop
-      muted
-      className="w-full h-full object-cover rounded"
-      style={{ objectPosition: 'center 20%', display: 'block' }}
-    />
-    {/* User Video Overlay (always in the corner) */}
-    <div className="absolute bottom-4 right-4 w-1/4 h-1/4 min-w-[120px] min-h-[90px] max-w-[240px] max-h-[180px]">
-      <video
-        ref={webcamRef}
-        autoPlay
-        muted
-        className="w-full h-full object-cover rounded shadow-lg border-2 border-white"
-        style={{ objectPosition: 'center 10%', display: 'block' }}
-      />
+        <div
+          className="
+            relative
+            w-full
+            max-w-[90vw]
+            sm:max-w-[480px]
+            md:max-w-[640px]
+            lg:max-w-[800px]
+            xl:max-w-[960px]
+            aspect-video
+            rounded
+            overflow-hidden
+            bg-black
+          "
+        >
+          {/* Agent Video (main background) */}
+          <video
+            ref={agentVideoRef}
+            src="/base-video.mp4"
+            loop
+            muted
+            className="w-full h-full object-cover rounded"
+            style={{ objectPosition: 'center 20%', display: 'block' }}
+          />
+          {/* User Video Overlay (always in the corner) */}
+          <div
+            className="
+              absolute
+              bottom-2 right-2
+              w-[28vw] h-[21vw]
+              min-w-[80px] min-h-[60px]
+              max-w-[160px] max-h-[120px]
+              sm:w-[120px] sm:h-[90px]
+              md:w-[160px] md:h-[120px]
+              lg:w-[180px] lg:h-[135px]
+              xl:w-[200px] xl:h-[150px]
+              "
+          >
+            <video
+              ref={webcamRef}
+              autoPlay
+              muted
+              className="w-full h-full object-cover rounded shadow-lg border-2 border-white"
+              style={{ objectPosition: 'center 10%', display: 'block' }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 text-center">
+        <p>Status: {status}</p>
+      </div>
+
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+      {downloadUrl && (
+        <a
+          href={downloadUrl}
+          download="conversation.webm"
+          className="inline-block mt-4 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded shadow transition-colors duration-200"
+        >
+          Download Conversation
+        </a>
+      )}
     </div>
-  </div>
-</div>
-
-    <div className="mt-4 text-center">
-      <p>Status: {status}</p>
-    </div>
-
-    <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-    {downloadUrl && (
-      <a
-        href={downloadUrl}
-        download="conversation.webm"
-        className="inline-block mt-4 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded shadow transition-colors duration-200"
-      >
-        Download Conversation
-      </a>
-    )}
-  </div>
   );
 }
