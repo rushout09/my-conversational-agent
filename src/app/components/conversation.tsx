@@ -5,6 +5,8 @@ export function Conversation() {
   // Initialize the conversation object
 
   const webcamRef = useRef<HTMLVideoElement>(null);
+  const webcamRefMobile = useRef<HTMLVideoElement>(null);
+  const agentCamRefMobile = useRef<HTMLVideoElement>(null);
 
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
@@ -21,21 +23,22 @@ export function Conversation() {
 
   // --- Play/pause agent video based on isSpeaking ---
   useEffect(() => {
-    const video = agentVideoRef.current;
-    if (!video) return;
-    if (isSpeaking) {
-      // Play if not already playing
-      if (video.paused) {
-        video.play().catch(() => {});
+    const videos = [agentVideoRef.current, agentCamRefMobile.current];
+    videos.forEach((video) => {
+      if (!video) return;
+      if (isSpeaking) {
+        // Play if not already playing
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
+      } else {
+        // Pause and keep frame visible
+        if (!video.paused) {
+          video.pause();
+        }
       }
-    } else {
-      // Pause and keep frame visible
-      if (!video.paused) {
-        video.pause();
-      }
-    }
+    });
   }, [isSpeaking]);
-  // --------------------------------------------------
 
   const mixAudioStreams = useCallback(async (userStream: MediaStream, agentStream: MediaStream): Promise<MediaStream> => {
     const audioContext = new AudioContext();
@@ -87,12 +90,19 @@ export function Conversation() {
         ctx.drawImage(agentVideoRef.current, 0, 0, canvas.width, canvas.height);
       }
       // Draw user video as overlay in the corner (keep aspect ratio)
-      if (webcamRef.current && webcamRef.current.readyState >= 2) {
+      // --- FIX: Use correct video element for user camera ---
+      let userVideoEl: HTMLVideoElement | null = null;
+      if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
+        // Mobile
+        userVideoEl = webcamRefMobile.current;
+      } else {
+        // Desktop
+        userVideoEl = webcamRef.current;
+      }
+      if (userVideoEl && userVideoEl.readyState >= 2) {
         // Overlay size and position (bottom right)
-        // Make overlay larger on mobile
         let overlayWidth = canvas.width * 0.25;
         let overlayHeight = canvas.height * 0.25;
-        // If portrait (mobile), make overlay bigger
         if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
           overlayWidth = canvas.width * 0.45;
           overlayHeight = canvas.height * 0.32;
@@ -103,7 +113,7 @@ export function Conversation() {
         ctx.beginPath();
         ctx.roundRect(x, y, overlayWidth, overlayHeight, 16);
         ctx.clip();
-        ctx.drawImage(webcamRef.current, x, y, overlayWidth, overlayHeight);
+        ctx.drawImage(userVideoEl, x, y, overlayWidth, overlayHeight);
         ctx.restore();
       }
       animationFrameId = requestAnimationFrame(draw);
@@ -177,6 +187,9 @@ export function Conversation() {
         if (webcamRef.current) {
           webcamRef.current.srcObject = stream;
         }
+        if (webcamRefMobile.current) {
+          webcamRefMobile.current.srcObject = stream;
+        }
       } catch (err) {
         console.error('Error accessing webcam:', err);
       }
@@ -212,6 +225,7 @@ export function Conversation() {
   // Modified: Start recording when starting conversation
   const startConversation = useCallback(async () => {
     setStatus('connecting');
+    setDownloadUrl(null); // Clear downloadUrl when starting conversation
     try {
       // Get ephemeral key
       const tokenResponse = await fetch("/api/session");
@@ -317,7 +331,7 @@ export function Conversation() {
             type: "response.create",
             response: {
               modalities: ["audio", "text"],
-              instructions: "Aap balak se uska naam puch k conversation ki shurwat kijiye",
+              instructions: "Your first message should be: Would like to talk in English, ya fir aap Hindi me baat karna chahenge",
               max_output_tokens: 100
             }
           };
@@ -370,139 +384,191 @@ export function Conversation() {
   // --- Fullscreen, responsive, scalable overlays and agent video ---
   // Make sure the main container is non-scrollable and fits the viewport
   // Make user video and controls larger and higher on mobile
+
+  // Prevent scroll on body and root
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const root = document.getElementById('__next') || document.getElementById('root');
+    if (root) root.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      if (root) root.style.overflow = '';
+    };
+  }, []);
+
+  // Calculate dynamic heights for layouts
+  // Header height: 110px (approx), Button bar: 64px (approx), padding: 24px
+  // So, available height = 100vh - header - buttons - padding
+  // We'll use flex and min/max heights to ensure no scroll
+
   return (
     <div
-      className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center w-screen h-screen overflow-hidden"
-      style={{
-        WebkitOverflowScrolling: 'auto',
-        overscrollBehavior: 'none',
-        maxHeight: '100dvh',
-        height: '100dvh',
-      }}
+      className="w-screen h-screen min-h-0 min-w-0 bg-gradient-to-b from-yellow-50 to-orange-100 flex flex-col items-center justify-start relative overflow-hidden"
+      style={{ touchAction: 'none' }}
     >
-      {/* Video area */}
-      <div className="relative w-full h-full flex-1 flex items-center justify-center overflow-hidden">
-        {/* Agent Video (main background, original aspect ratio, centered, responsive) */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black z-0">
-          <video
-            ref={agentVideoRef}
-            src="/base-video.mp4"
-            loop
-            muted
-            className="
-              w-full h-full
-              max-w-full max-h-full
-              object-contain
-              bg-black
-              transition-all
-              duration-300
-            "
-            style={{
-              objectFit: 'contain',
-              objectPosition: 'center',
-              display: 'block',
-              background: 'black',
-              zIndex: 1,
-            }}
-          />
-        </div>
-        {/* User Video Overlay (bottom right corner, responsive, larger and higher on mobile) */}
-        <video
-          ref={webcamRef}
-          autoPlay
-          muted
-          className="
-            absolute
-            rounded-lg shadow-lg border-4 border-white
-            object-cover
-            z-10
-            transition-all
-            duration-300
-            right-[4vw]
-            bottom-[4vw]
-            w-[22vw] h-[16vw]
-            min-w-[80px] min-h-[60px]
-            max-w-[320px] max-h-[240px]
-            sm:w-[18vw] sm:h-[13vw]
-            md:w-[14vw] md:h-[10vw]
-            lg:w-[12vw] lg:h-[9vw]
-            xl:w-[10vw] xl:h-[7vw]
-            mobile-user-video
-          "
+      {/* Top bar with title and logo */}
+      <div
+        className="w-full flex flex-col items-center px-4 py-4 flex-shrink-0"
+        style={{ minHeight: 90, maxHeight: 120 }}
+      >
+        <h1 className="text-4xl md:text-5xl font-bold text-orange-800 text-center leading-tight">Baal Krishna</h1>
+        <p className="text-lg md:text-xl text-orange-600 mt-1 md:mt-2 text-center">Listen to stories from Kanha</p>
+      </div>
+
+      {/* Start/Stop buttons */}
+      <div
+        className="flex gap-4 mt-1 mb-2 flex-shrink-0 px-2 md:px-0"
+        style={{ minHeight: 48, maxHeight: 64 }}
+      >
+        <button
+          onClick={startConversation}
+          disabled={status === 'connected' || status === 'connecting'}
+          className={`bg-orange-500 text-white px-5 py-2 rounded-lg text-base md:text-lg font-semibold shadow transition-opacity duration-200 ${
+            status === 'connected' || status === 'connecting'
+              ? 'opacity-50 cursor-not-allowed'
+              : 'hover:bg-orange-600'
+          }`}
+        >
+          {status === 'connecting' ? 'Connecting...' : 'Start Conversation'}
+        </button>
+        <button
+          onClick={stopConversation}
+          disabled={status !== 'connected'}
+          className={`px-5 py-2 rounded-lg text-base md:text-lg font-semibold shadow transition-colors duration-200 ${
+            status === 'connected'
+              ? 'bg-red-500 hover:bg-red-600 text-white'
+              : 'bg-gray-300 text-gray-600'
+          }`}
+        >
+          Stop Conversation
+        </button>
+      </div>
+
+      {/* Main content area, fills all remaining space, no scroll */}
+      <div
+        className="flex-1 w-full flex flex-col items-center justify-center min-h-0 min-w-0"
+        style={{ maxHeight: '100%', width: '100%' }}
+      >
+        {/* Desktop layout (hidden on mobile) */}
+        <div
+          className="hidden md:flex flex-1 w-full justify-center items-center gap-10"
           style={{
-            objectPosition: 'center 10%',
-            display: 'block',
+            maxHeight: '100%',
+            minHeight: 0,
+            minWidth: 0,
+            paddingBottom: 0,
+            paddingTop: 0,
           }}
-        />
-        {/* Status indicator (responsive, bottom left, higher on mobile) */}
-        <div
-          className="
-            absolute
-            left-[4vw]
-            bottom-[4vw]
-            bg-black/60 text-white
-            px-3 py-2
-            sm:px-4 sm:py-2
-            md:px-6 md:py-3
-            rounded-lg
-            text-sm sm:text-base md:text-lg
-            font-medium shadow
-            z-20
-            transition-all
-            duration-300
-            mobile-status-indicator
-          "
         >
-          {status}
+          {/* User Camera Card */}
+          <div
+            className="bg-white rounded-xl shadow-lg flex flex-col items-center justify-center"
+            style={{
+              width: 400,
+              height: 400,
+              minWidth: 0,
+              minHeight: 0,
+              padding: 18,
+              boxSizing: 'border-box',
+              flexShrink: 0,
+            }}
+          >
+            <div className="flex items-center w-full mb-3">
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+              <span className="mx-3 text-lg font-semibold text-orange-700 whitespace-nowrap">Your Camera</span>
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+            </div>
+            <video
+              ref={webcamRef}
+              autoPlay
+              muted
+              className="rounded-lg w-full h-full object-cover bg-gray-200"
+              style={{ minHeight: 0, minWidth: 0, maxHeight: 'calc(100% - 36px)' }}
+            />
+          </div>
+          {/* Kanha Card */}
+          <div
+            className="bg-white rounded-xl shadow-lg flex flex-col items-center justify-center"
+            style={{
+              width: 400,
+              height: 400,
+              minWidth: 0,
+              minHeight: 0,
+              padding: 18,
+              boxSizing: 'border-box',
+              flexShrink: 0,
+            }}
+          >
+            <div className="flex items-center w-full mb-3">
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+              <span className="mx-3 text-lg font-semibold text-orange-700 whitespace-nowrap">Kanha</span>
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+            </div>
+            <video
+              ref={agentCamRefMobile}
+              src="/base-video.mp4"
+              loop
+              muted
+              className="rounded-lg w-full h-full object-cover object-top bg-yellow-100"
+              style={{ minHeight: 0, minWidth: 0, maxHeight: 'calc(100% - 36px)' }}
+            />
+          </div>
         </div>
-        {/* Floating controls (responsive, bottom center, higher and larger on mobile) */}
+
+        {/* Mobile layout (only visible on mobile) */}
         <div
-          className="
-            absolute
-            left-1/2
-            -translate-x-1/2
-            flex flex-wrap gap-4
-            z-20
-            px-2
-            bottom-[4vw]
-            mobile-controls
-          "
+          className="md:hidden w-full flex-1 flex flex-col justify-center items-center"
+          style={{
+            minHeight: 0,
+            minWidth: 0,
+            maxHeight: '100%',
+            padding: 0,
+          }}
         >
-          <button
-            onClick={startConversation}
-            disabled={status === 'connected' || status === 'connecting'}
-            className="
-              px-4 py-2
-              sm:px-6 sm:py-3
-              md:px-8 md:py-4
-              bg-blue-600 text-white rounded-lg
-              text-base sm:text-lg md:text-xl
-              font-semibold shadow
-              disabled:bg-gray-400
-              transition
-              mobile-control-btn
-            "
+          <div
+            className="w-full max-w-[98vw] aspect-[4/4.25] bg-yellow-100 rounded-xl overflow-hidden relative flex flex-col justify-center items-center"
+            style={{
+              flex: '0 1 auto',
+              minHeight: 0,
+              minWidth: 0,
+              height: 'calc(100vw * 4.25 / 4)',
+              maxHeight: 'calc(100vh - 170px)',
+              margin: 0,
+            }}
           >
-            Start
-          </button>
-          <button
-            onClick={stopConversation}
-            disabled={status !== 'connected'}
-            className="
-              px-4 py-2
-              sm:px-6 sm:py-3
-              md:px-8 md:py-4
-              bg-red-600 text-white rounded-lg
-              text-base sm:text-lg md:text-xl
-              font-semibold shadow
-              disabled:bg-gray-400
-              transition
-              mobile-control-btn
-            "
+            {/* Kanha Video */}
+            <video
+              ref={agentVideoRef}
+              src="/base-video.mp4"
+              loop
+              muted
+              className="w-full h-full object-cover object-top"
+              style={{ minHeight: 0, minWidth: 0 }}
+            />
+            {/* User Camera Overlay */}
+            <div className="absolute top-2 right-2">
+              <video
+                ref={webcamRefMobile}
+                autoPlay
+                muted
+                className="w-20 h-24 rounded-xl object-cover border-2 border-white shadow-lg"
+                style={{ minHeight: 0, minWidth: 0 }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      {/* Download button: ensure it's visible and accessible on all devices */}
+      {downloadUrl && (
+        <>
+          {/* Desktop: absolute center bottom */}
+          <div
+            className="hidden md:block absolute bottom-4 left-1/2 -translate-x-1/2 z-50"
+            style={{ pointerEvents: 'auto' }}
           >
-            Stop
-          </button>
-          {downloadUrl && (
             <a
               href={downloadUrl}
               download="conversation.webm"
@@ -517,47 +583,41 @@ export function Conversation() {
                 mobile-control-btn
               "
             >
-              Download
+              Download to share
             </a>
-          )}
-        </div>
-      </div>
-      {/* Hidden canvas for recording */}
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-      {/* Inline style for mobile adjustments */}
-      <style>{`
-        html, body {
-          overscroll-behavior: none;
-          height: 100dvh;
-          max-height: 100dvh;
-          overflow: hidden !important;
-        }
-        @media (max-width: 640px) {
-          .mobile-user-video {
-            width: 44vw !important;
-            height: 32vw !important;
-            min-width: 120px !important;
-            min-height: 90px !important;
-            max-width: 90vw !important;
-            max-height: 40vw !important;
-            right: 6vw !important;
-            bottom: 18vw !important;
-          }
-          .mobile-status-indicator {
-            left: 6vw !important;
-            bottom: 18vw !important;
-            font-size: 1.1rem !important;
-            padding: 0.7rem 1.2rem !important;
-          }
-          .mobile-controls {
-            bottom: 6vw !important;
-          }
-          .mobile-control-btn {
-            font-size: 1.2rem !important;
-            padding: 1.1rem 2.2rem !important;
-          }
-        }
-      `}</style>
+          </div>
+          {/* Mobile: fixed bottom full width */}
+          <div
+            className="md:hidden fixed bottom-0 left-0 w-full flex justify-center z-50 px-3"
+            style={{
+              pointerEvents: 'auto',
+              background: 'linear-gradient(to top, #fffbe8 80%, rgba(255,255,255,0) 100%)',
+              padding: '16px 0 24px 0',
+            }}
+          >
+            <a
+              href={downloadUrl}
+              download="conversation.webm"
+              className="
+                w-[90vw] max-w-lg
+                px-4 py-3
+                bg-green-600 hover:bg-green-700
+                text-white font-semibold rounded-xl shadow
+                transition-colors duration-200
+                text-lg
+                text-center
+                mobile-control-btn
+              "
+              style={{
+                fontSize: '1.15rem',
+                boxShadow: '0 4px 16px 0 rgba(0,0,0,0.10)',
+              }}
+            >
+              Download to share
+            </a>
+          </div>
+        </>
+      )}
     </div>
   );
 }
