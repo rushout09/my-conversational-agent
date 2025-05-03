@@ -486,7 +486,7 @@ export function Conversation() {
                 mobile-control-btn
               "
             >
-              Download
+              Download to share
             </a>
           )}
 
