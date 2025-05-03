@@ -551,7 +551,7 @@ Ask user what they want a reading about when they say hello! Be unequivocal in y
             {/* Kanha Video */}
             <video
               ref={agentVideoRef}
-              src="/base-video.mp4"
+              src="/base-video-tarot.mp4"
               loop
               muted
               className="w-full h-full object-cover object-top"
