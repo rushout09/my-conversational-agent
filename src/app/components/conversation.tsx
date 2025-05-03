@@ -89,8 +89,14 @@ export function Conversation() {
       // Draw user video as overlay in the corner (keep aspect ratio)
       if (webcamRef.current && webcamRef.current.readyState >= 2) {
         // Overlay size and position (bottom right)
-        const overlayWidth = canvas.width * 0.25;
-        const overlayHeight = canvas.height * 0.25;
+        // Make overlay larger on mobile
+        let overlayWidth = canvas.width * 0.25;
+        let overlayHeight = canvas.height * 0.25;
+        // If portrait (mobile), make overlay bigger
+        if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
+          overlayWidth = canvas.width * 0.45;
+          overlayHeight = canvas.height * 0.32;
+        }
         const x = canvas.width - overlayWidth - 32;
         const y = canvas.height - overlayHeight - 32;
         ctx.save();
@@ -362,8 +368,18 @@ export function Conversation() {
   }, [pc, stopRecording]);
 
   // --- Fullscreen, responsive, scalable overlays and agent video ---
+  // Make sure the main container is non-scrollable and fits the viewport
+  // Make user video and controls larger and higher on mobile
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center w-screen h-screen">
+    <div
+      className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center w-screen h-screen overflow-hidden"
+      style={{
+        WebkitOverflowScrolling: 'auto',
+        overscrollBehavior: 'none',
+        maxHeight: '100dvh',
+        height: '100dvh',
+      }}
+    >
       {/* Video area */}
       <div className="relative w-full h-full flex-1 flex items-center justify-center overflow-hidden">
         {/* Agent Video (main background, original aspect ratio, centered, responsive) */}
@@ -390,34 +406,40 @@ export function Conversation() {
             }}
           />
         </div>
-        {/* User Video Overlay (bottom right corner, responsive) */}
+        {/* User Video Overlay (bottom right corner, responsive, larger and higher on mobile) */}
         <video
           ref={webcamRef}
           autoPlay
           muted
           className="
             absolute
-            bottom-[4vw] right-[4vw]
-            w-[22vw] h-[16vw]
-            min-w-[80px] min-h-[60px]
-            max-w-[320px] max-h-[240px]
             rounded-lg shadow-lg border-4 border-white
             object-cover
             z-10
             transition-all
             duration-300
+            right-[4vw]
+            bottom-[4vw]
+            w-[22vw] h-[16vw]
+            min-w-[80px] min-h-[60px]
+            max-w-[320px] max-h-[240px]
             sm:w-[18vw] sm:h-[13vw]
             md:w-[14vw] md:h-[10vw]
             lg:w-[12vw] lg:h-[9vw]
             xl:w-[10vw] xl:h-[7vw]
+            mobile-user-video
           "
-          style={{ objectPosition: 'center 10%', display: 'block' }}
+          style={{
+            objectPosition: 'center 10%',
+            display: 'block',
+          }}
         />
-        {/* Status indicator (responsive, bottom left) */}
+        {/* Status indicator (responsive, bottom left, higher on mobile) */}
         <div
           className="
             absolute
-            bottom-[4vw] left-[4vw]
+            left-[4vw]
+            bottom-[4vw]
             bg-black/60 text-white
             px-3 py-2
             sm:px-4 sm:py-2
@@ -428,19 +450,22 @@ export function Conversation() {
             z-20
             transition-all
             duration-300
+            mobile-status-indicator
           "
         >
           {status}
         </div>
-        {/* Floating controls (responsive, bottom center) */}
+        {/* Floating controls (responsive, bottom center, higher and larger on mobile) */}
         <div
           className="
             absolute
-            bottom-[4vw] left-1/2
+            left-1/2
             -translate-x-1/2
             flex flex-wrap gap-4
             z-20
             px-2
+            bottom-[4vw]
+            mobile-controls
           "
         >
           <button
@@ -455,6 +480,7 @@ export function Conversation() {
               font-semibold shadow
               disabled:bg-gray-400
               transition
+              mobile-control-btn
             "
           >
             Start
@@ -471,6 +497,7 @@ export function Conversation() {
               font-semibold shadow
               disabled:bg-gray-400
               transition
+              mobile-control-btn
             "
           >
             Stop
@@ -487,6 +514,7 @@ export function Conversation() {
                 text-white font-semibold rounded-lg shadow
                 transition-colors duration-200
                 text-base sm:text-lg md:text-xl
+                mobile-control-btn
               "
             >
               Download
@@ -496,6 +524,40 @@ export function Conversation() {
       </div>
       {/* Hidden canvas for recording */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+      {/* Inline style for mobile adjustments */}
+      <style>{`
+        html, body {
+          overscroll-behavior: none;
+          height: 100dvh;
+          max-height: 100dvh;
+          overflow: hidden !important;
+        }
+        @media (max-width: 640px) {
+          .mobile-user-video {
+            width: 44vw !important;
+            height: 32vw !important;
+            min-width: 120px !important;
+            min-height: 90px !important;
+            max-width: 90vw !important;
+            max-height: 40vw !important;
+            right: 6vw !important;
+            bottom: 18vw !important;
+          }
+          .mobile-status-indicator {
+            left: 6vw !important;
+            bottom: 18vw !important;
+            font-size: 1.1rem !important;
+            padding: 0.7rem 1.2rem !important;
+          }
+          .mobile-controls {
+            bottom: 6vw !important;
+          }
+          .mobile-control-btn {
+            font-size: 1.2rem !important;
+            padding: 1.1rem 2.2rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
