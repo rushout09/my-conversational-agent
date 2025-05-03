@@ -343,8 +343,8 @@ export function Conversation() {
   }, [pc, stopRecording]);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="flex gap-2">
+    <div className="flex flex-col items-center gap-4 w-full">
+    <div className="flex gap-2">
         <button
           onClick={startConversation}
           disabled={status === 'connected' || status === 'connecting'}
@@ -361,47 +361,45 @@ export function Conversation() {
         </button>
       </div>
 
-      <div className="flex gap-6 mt-8 flex-wrap justify-center">
-        {/* User's Webcam */}
-        <div className="border p-4">
-          <p className="text-center mb-2 text-lg">Your Camera</p>
-          <video
-            ref={webcamRef}
-            autoPlay
-            muted
-            className="w-96 h-72 object-cover rounded"
-          />
-        </div>
-
-        {/* Agent Video or Image */}
-        <div className="border p-4">
-          <p className="text-center mb-2 text-lg">Agent</p>
-          <video
-            ref={agentVideoRef}
-            src="/base-video.mp4" 
-            loop
-            muted
-            className="w-96 h-72 object-cover rounded"
-            style={{ objectPosition: 'center 25%', display: 'block' }}
-          />
-        </div>
-      </div>
-
-      <div className="mt-4 text-center">
-        <p>Status: {status}</p>
-      </div>
-
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-      {downloadUrl && (
-        <a
-          href={downloadUrl}
-          download="conversation.webm"
-          className="inline-block mt-4 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded shadow transition-colors duration-200"
-        >
-          Download Conversation
-        </a>
-      )}
+      <div className="w-full flex justify-center mt-4">
+  <div className="relative w-full max-w-3xl aspect-[1/1]">
+    {/* Agent Video (main background) */}
+    <video
+      ref={agentVideoRef}
+      src="/base-video.mp4"
+      loop
+      muted
+      className="w-full h-full object-cover rounded"
+      style={{ objectPosition: 'center 20%', display: 'block' }}
+    />
+    {/* User Video Overlay (always in the corner) */}
+    <div className="absolute bottom-4 right-4 w-1/4 h-1/4 min-w-[120px] min-h-[90px] max-w-[240px] max-h-[180px]">
+      <video
+        ref={webcamRef}
+        autoPlay
+        muted
+        className="w-full h-full object-cover rounded shadow-lg border-2 border-white"
+        style={{ objectPosition: 'center 10%', display: 'block' }}
+      />
     </div>
+  </div>
+</div>
+
+    <div className="mt-4 text-center">
+      <p>Status: {status}</p>
+    </div>
+
+    <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+    {downloadUrl && (
+      <a
+        href={downloadUrl}
+        download="conversation.webm"
+        className="inline-block mt-4 px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded shadow transition-colors duration-200"
+      >
+        Download Conversation
+      </a>
+    )}
+  </div>
   );
 }
