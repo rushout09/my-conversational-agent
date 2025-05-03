@@ -85,39 +85,39 @@ export function Conversation() {
     let animationFrameId: number;
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // Draw agent video at its natural aspect ratio, filling the canvas
-  if (agentVideoRef.current && agentVideoRef.current.readyState >= 2) {
-    ctx.drawImage(agentVideoRef.current, 0, 0, canvas.width, canvas.height);
-  }
-  // Draw user video as overlay in the corner (keep aspect ratio)
-  // --- FIX: Use correct video element for user camera ---
-  let userVideoEl: HTMLVideoElement | null = null;
-  if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
-    // Mobile
-    userVideoEl = webcamRefMobile.current;
-  } else {
-    // Desktop
-    userVideoEl = webcamRef.current;
-  }
-  if (userVideoEl && userVideoEl.readyState >= 2) {
-    // Overlay size and position (bottom right)
-    let overlayWidth = canvas.width * 0.25;
-    let overlayHeight = canvas.height * 0.25;
-    if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
-      overlayWidth = canvas.width * 0.45;
-      overlayHeight = canvas.height * 0.32;
+      // Draw agent video at its natural aspect ratio, filling the canvas
+      if (agentVideoRef.current && agentVideoRef.current.readyState >= 2) {
+        ctx.drawImage(agentVideoRef.current, 0, 0, canvas.width, canvas.height);
+      }
+      // Draw user video as overlay in the corner (keep aspect ratio)
+      // --- FIX: Use correct video element for user camera ---
+      let userVideoEl: HTMLVideoElement | null = null;
+      if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
+        // Mobile
+        userVideoEl = webcamRefMobile.current;
+      } else {
+        // Desktop
+        userVideoEl = webcamRef.current;
+      }
+      if (userVideoEl && userVideoEl.readyState >= 2) {
+        // Overlay size and position (bottom right)
+        let overlayWidth = canvas.width * 0.25;
+        let overlayHeight = canvas.height * 0.25;
+        if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
+          overlayWidth = canvas.width * 0.45;
+          overlayHeight = canvas.height * 0.32;
+        }
+        const x = canvas.width - overlayWidth - 32;
+        const y = canvas.height - overlayHeight - 32;
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x, y, overlayWidth, overlayHeight, 16);
+        ctx.clip();
+        ctx.drawImage(userVideoEl, x, y, overlayWidth, overlayHeight);
+        ctx.restore();
+      }
+      animationFrameId = requestAnimationFrame(draw);
     }
-    const x = canvas.width - overlayWidth - 32;
-    const y = canvas.height - overlayHeight - 32;
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(x, y, overlayWidth, overlayHeight, 16);
-    ctx.clip();
-    ctx.drawImage(userVideoEl, x, y, overlayWidth, overlayHeight);
-    ctx.restore();
-  }
-  animationFrameId = requestAnimationFrame(draw);
-}
     draw();
 
     // 4. Get video stream from canvas
@@ -225,6 +225,7 @@ export function Conversation() {
   // Modified: Start recording when starting conversation
   const startConversation = useCallback(async () => {
     setStatus('connecting');
+    setDownloadUrl(null); // Clear downloadUrl when starting conversation
     try {
       // Get ephemeral key
       const tokenResponse = await fetch("/api/session");
@@ -330,7 +331,7 @@ export function Conversation() {
             type: "response.create",
             response: {
               modalities: ["audio", "text"],
-              instructions: "Aap balak se uska naam puch k conversation ki shurwat kijiye",
+              instructions: "Your first message should be: Would like to talk in English, ya fir aap Hindi me baat karna chahenge",
               max_output_tokens: 100
             }
           };
@@ -383,31 +384,58 @@ export function Conversation() {
   // --- Fullscreen, responsive, scalable overlays and agent video ---
   // Make sure the main container is non-scrollable and fits the viewport
   // Make user video and controls larger and higher on mobile
+
+  // Prevent scroll on body and root
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const root = document.getElementById('__next') || document.getElementById('root');
+    if (root) root.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      if (root) root.style.overflow = '';
+    };
+  }, []);
+
+  // Calculate dynamic heights for layouts
+  // Header height: 110px (approx), Button bar: 64px (approx), padding: 24px
+  // So, available height = 100vh - header - buttons - padding
+  // We'll use flex and min/max heights to ensure no scroll
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-yellow-50 to-orange-100 flex flex-col items-center relative">
+    <div
+      className="w-screen h-screen min-h-0 min-w-0 bg-gradient-to-b from-yellow-50 to-orange-100 flex flex-col items-center justify-start relative overflow-hidden"
+      style={{ touchAction: 'none' }}
+    >
       {/* Top bar with title and logo */}
-      <div className="w-full flex flex-col items-center px-12 py-6">
-        <h1 className="text-5xl font-bold text-orange-800 text-center">Baal Krishna</h1>
-        <p className="text-xl text-orange-600 mt-2 text-center">Listen to stories from Kanha</p>
+      <div
+        className="w-full flex flex-col items-center px-4 py-4 flex-shrink-0"
+        style={{ minHeight: 90, maxHeight: 120 }}
+      >
+        <h1 className="text-4xl md:text-5xl font-bold text-orange-800 text-center leading-tight">Baal Krishna</h1>
+        <p className="text-lg md:text-xl text-orange-600 mt-1 md:mt-2 text-center">Listen to stories from Kanha</p>
       </div>
 
       {/* Start/Stop buttons */}
-      <div className="flex gap-4 mt-3 mb-10">
+      <div
+        className="flex gap-4 mt-1 mb-2 flex-shrink-0 px-2 md:px-0"
+        style={{ minHeight: 48, maxHeight: 64 }}
+      >
         <button
           onClick={startConversation}
           disabled={status === 'connected' || status === 'connecting'}
-          className={`bg-orange-500 text-white px-6 py-2 rounded-lg text-lg font-semibold shadow transition-opacity duration-200 ${
+          className={`bg-orange-500 text-white px-5 py-2 rounded-lg text-base md:text-lg font-semibold shadow transition-opacity duration-200 ${
             status === 'connected' || status === 'connecting'
               ? 'opacity-50 cursor-not-allowed'
               : 'hover:bg-orange-600'
           }`}
         >
-          Start Conversation
+          {status === 'connecting' ? 'Connecting...' : 'Start Conversation'}
         </button>
         <button
           onClick={stopConversation}
           disabled={status !== 'connected'}
-          className={`px-6 py-2 rounded-lg text-lg font-semibold shadow transition-colors duration-200 ${
+          className={`px-5 py-2 rounded-lg text-base md:text-lg font-semibold shadow transition-colors duration-200 ${
             status === 'connected'
               ? 'bg-red-500 hover:bg-red-600 text-white'
               : 'bg-gray-300 text-gray-600'
@@ -417,61 +445,130 @@ export function Conversation() {
         </button>
       </div>
 
-      {/* Desktop layout (hidden on mobile) */}
-      <div className="hidden md:flex gap-12 mt-6 mb-4" style={{ marginTop: '-0.1cm' }}>
-        {/* User Camera Card */}
-        <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center w-[420px]">
-          <div className="flex items-center w-full mb-4">
-            <div className="flex-1 border-t-4 border-orange-500"></div>
-            <span className="mx-4 text-xl font-semibold text-orange-700 whitespace-nowrap">Your Camera</span>
-            <div className="flex-1 border-t-4 border-orange-500"></div>
+      {/* Main content area, fills all remaining space, no scroll */}
+      <div
+        className="flex-1 w-full flex flex-col items-center justify-center min-h-0 min-w-0"
+        style={{ maxHeight: '100%', width: '100%' }}
+      >
+        {/* Desktop layout (hidden on mobile) */}
+        <div
+          className="hidden md:flex flex-1 w-full justify-center items-center gap-10"
+          style={{
+            maxHeight: '100%',
+            minHeight: 0,
+            minWidth: 0,
+            paddingBottom: 0,
+            paddingTop: 0,
+          }}
+        >
+          {/* User Camera Card */}
+          <div
+            className="bg-white rounded-xl shadow-lg flex flex-col items-center justify-center"
+            style={{
+              width: 400,
+              height: 400,
+              minWidth: 0,
+              minHeight: 0,
+              padding: 18,
+              boxSizing: 'border-box',
+              flexShrink: 0,
+            }}
+          >
+            <div className="flex items-center w-full mb-3">
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+              <span className="mx-3 text-lg font-semibold text-orange-700 whitespace-nowrap">Your Camera</span>
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+            </div>
+            <video
+              ref={webcamRef}
+              autoPlay
+              muted
+              className="rounded-lg w-full h-full object-cover bg-gray-200"
+              style={{ minHeight: 0, minWidth: 0, maxHeight: 'calc(100% - 36px)' }}
+            />
           </div>
-          <video
-            ref={webcamRef}
-            autoPlay
-            muted
-            className="rounded-lg w-full h-100 object-cover bg-gray-200"
-          />
+          {/* Kanha Card */}
+          <div
+            className="bg-white rounded-xl shadow-lg flex flex-col items-center justify-center"
+            style={{
+              width: 400,
+              height: 400,
+              minWidth: 0,
+              minHeight: 0,
+              padding: 18,
+              boxSizing: 'border-box',
+              flexShrink: 0,
+            }}
+          >
+            <div className="flex items-center w-full mb-3">
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+              <span className="mx-3 text-lg font-semibold text-orange-700 whitespace-nowrap">Kanha</span>
+              <div className="flex-1 border-t-4 border-orange-500"></div>
+            </div>
+            <video
+              ref={agentCamRefMobile}
+              src="/base-video.mp4"
+              loop
+              muted
+              className="rounded-lg w-full h-full object-cover object-top bg-yellow-100"
+              style={{ minHeight: 0, minWidth: 0, maxHeight: 'calc(100% - 36px)' }}
+            />
+          </div>
         </div>
-        {/* Kanha Card */}
-        <div className="bg-white rounded-xl shadow-lg p-6 flex flex-col items-center w-[420px]">
-          <div className="flex items-center w-full mb-4">
-            <div className="flex-1 border-t-4 border-orange-500"></div>
-            <span className="mx-4 text-xl font-semibold text-orange-700 whitespace-nowrap">Kanha</span>
-            <div className="flex-1 border-t-4 border-orange-500"></div>
+
+        {/* Mobile layout (only visible on mobile) */}
+        <div
+          className="md:hidden w-full flex-1 flex flex-col justify-center items-center"
+          style={{
+            minHeight: 0,
+            minWidth: 0,
+            maxHeight: '100%',
+            padding: 0,
+          }}
+        >
+          <div
+            className="w-full max-w-[98vw] aspect-[4/4.25] bg-yellow-100 rounded-xl overflow-hidden relative flex flex-col justify-center items-center"
+            style={{
+              flex: '0 1 auto',
+              minHeight: 0,
+              minWidth: 0,
+              height: 'calc(100vw * 4.25 / 4)',
+              maxHeight: 'calc(100vh - 170px)',
+              margin: 0,
+            }}
+          >
+            {/* Kanha Video */}
+            <video
+              ref={agentVideoRef}
+              src="/base-video.mp4"
+              loop
+              muted
+              className="w-full h-full object-cover object-top"
+              style={{ minHeight: 0, minWidth: 0 }}
+            />
+            {/* User Camera Overlay */}
+            <div className="absolute top-2 right-2">
+              <video
+                ref={webcamRefMobile}
+                autoPlay
+                muted
+                className="w-20 h-24 rounded-xl object-cover border-2 border-white shadow-lg"
+                style={{ minHeight: 0, minWidth: 0 }}
+              />
+            </div>
           </div>
-          <video
-            ref={agentCamRefMobile}
-            src="/base-video.mp4"
-            loop
-            muted
-            className="rounded-lg w-full h-100 object-cover object-top bg-yellow-100"
-          />
         </div>
       </div>
 
-      {/* Mobile layout (only visible on mobile) */}
-      <div className="md:hidden w-full max-w-md mx-auto bg-yellow-100 rounded-xl overflow-hidden relative aspect-[4/4.25] flex flex-col justify-center items-center">
-        {/* Kanha Video */}
-        <video
-          ref={agentVideoRef}
-          src="/base-video.mp4"
-          loop
-          muted
-          className="w-full h-full object-cover object-top"
-        />
-        {/* User Camera Overlay */}
-        <div className="absolute top-3 right-3">
-          <video
-            ref={webcamRefMobile}
-            autoPlay
-            muted
-            className="w-24 h-28 rounded-xl object-cover border-2 border-white shadow-lg"
-          />
-        </div>
-      </div>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+      {/* Download button: ensure it's visible and accessible on all devices */}
       {downloadUrl && (
+        <>
+          {/* Desktop: absolute center bottom */}
+          <div
+            className="hidden md:block absolute bottom-4 left-1/2 -translate-x-1/2 z-50"
+            style={{ pointerEvents: 'auto' }}
+          >
             <a
               href={downloadUrl}
               download="conversation.webm"
@@ -488,9 +585,39 @@ export function Conversation() {
             >
               Download to share
             </a>
-          )}
-
-      
+          </div>
+          {/* Mobile: fixed bottom full width */}
+          <div
+            className="md:hidden fixed bottom-0 left-0 w-full flex justify-center z-50 px-3"
+            style={{
+              pointerEvents: 'auto',
+              background: 'linear-gradient(to top, #fffbe8 80%, rgba(255,255,255,0) 100%)',
+              padding: '16px 0 24px 0',
+            }}
+          >
+            <a
+              href={downloadUrl}
+              download="conversation.webm"
+              className="
+                w-[90vw] max-w-lg
+                px-4 py-3
+                bg-green-600 hover:bg-green-700
+                text-white font-semibold rounded-xl shadow
+                transition-colors duration-200
+                text-lg
+                text-center
+                mobile-control-btn
+              "
+              style={{
+                fontSize: '1.15rem',
+                boxShadow: '0 4px 16px 0 rgba(0,0,0,0.10)',
+              }}
+            >
+              Download to share
+            </a>
+          </div>
+        </>
+      )}
     </div>
   );
 }
