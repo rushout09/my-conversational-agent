@@ -513,7 +513,7 @@ Ask user what they want a reading about when they say hello! Be unequivocal in y
           >
             <div className="flex items-center w-full mb-3">
               <div className="flex-1 border-t-4 border-orange-500"></div>
-              <span className="mx-3 text-lg font-semibold text-orange-700 whitespace-nowrap">Kanha</span>
+              <span className="mx-3 text-lg font-semibold text-orange-700 whitespace-nowrap">Tarot Card Reader</span>
               <div className="flex-1 border-t-4 border-orange-500"></div>
             </div>
             <video
