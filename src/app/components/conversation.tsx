@@ -6,6 +6,7 @@ export function Conversation() {
 
   const webcamRef = useRef<HTMLVideoElement>(null);
   const webcamRefMobile = useRef<HTMLVideoElement>(null);
+  const agentCamRefMobile = useRef<HTMLVideoElement>(null);
 
   const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
@@ -22,21 +23,22 @@ export function Conversation() {
 
   // --- Play/pause agent video based on isSpeaking ---
   useEffect(() => {
-    const video = agentVideoRef.current;
-    if (!video) return;
-    if (isSpeaking) {
-      // Play if not already playing
-      if (video.paused) {
-        video.play().catch(() => {});
+    const videos = [agentVideoRef.current, agentCamRefMobile.current];
+    videos.forEach((video) => {
+      if (!video) return;
+      if (isSpeaking) {
+        // Play if not already playing
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
+      } else {
+        // Pause and keep frame visible
+        if (!video.paused) {
+          video.pause();
+        }
       }
-    } else {
-      // Pause and keep frame visible
-      if (!video.paused) {
-        video.pause();
-      }
-    }
+    });
   }, [isSpeaking]);
-  // --------------------------------------------------
 
   const mixAudioStreams = useCallback(async (userStream: MediaStream, agentStream: MediaStream): Promise<MediaStream> => {
     const audioContext = new AudioContext();
@@ -83,32 +85,39 @@ export function Conversation() {
     let animationFrameId: number;
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      // Draw agent video at its natural aspect ratio, filling the canvas
-      if (agentVideoRef.current && agentVideoRef.current.readyState >= 2) {
-        ctx.drawImage(agentVideoRef.current, 0, 0, canvas.width, canvas.height);
-      }
-      // Draw user video as overlay in the corner (keep aspect ratio)
-      if (webcamRef.current && webcamRef.current.readyState >= 2) {
-        // Overlay size and position (bottom right)
-        // Make overlay larger on mobile
-        let overlayWidth = canvas.width * 0.25;
-        let overlayHeight = canvas.height * 0.25;
-        // If portrait (mobile), make overlay bigger
-        if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
-          overlayWidth = canvas.width * 0.45;
-          overlayHeight = canvas.height * 0.32;
-        }
-        const x = canvas.width - overlayWidth - 32;
-        const y = canvas.height - overlayHeight - 32;
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(x, y, overlayWidth, overlayHeight, 16);
-        ctx.clip();
-        ctx.drawImage(webcamRef.current, x, y, overlayWidth, overlayHeight);
-        ctx.restore();
-      }
-      animationFrameId = requestAnimationFrame(draw);
+  // Draw agent video at its natural aspect ratio, filling the canvas
+  if (agentVideoRef.current && agentVideoRef.current.readyState >= 2) {
+    ctx.drawImage(agentVideoRef.current, 0, 0, canvas.width, canvas.height);
+  }
+  // Draw user video as overlay in the corner (keep aspect ratio)
+  // --- FIX: Use correct video element for user camera ---
+  let userVideoEl: HTMLVideoElement | null = null;
+  if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
+    // Mobile
+    userVideoEl = webcamRefMobile.current;
+  } else {
+    // Desktop
+    userVideoEl = webcamRef.current;
+  }
+  if (userVideoEl && userVideoEl.readyState >= 2) {
+    // Overlay size and position (bottom right)
+    let overlayWidth = canvas.width * 0.25;
+    let overlayHeight = canvas.height * 0.25;
+    if (window.innerWidth < 640 || window.innerHeight > window.innerWidth) {
+      overlayWidth = canvas.width * 0.45;
+      overlayHeight = canvas.height * 0.32;
     }
+    const x = canvas.width - overlayWidth - 32;
+    const y = canvas.height - overlayHeight - 32;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, overlayWidth, overlayHeight, 16);
+    ctx.clip();
+    ctx.drawImage(userVideoEl, x, y, overlayWidth, overlayHeight);
+    ctx.restore();
+  }
+  animationFrameId = requestAnimationFrame(draw);
+}
     draw();
 
     // 4. Get video stream from canvas
@@ -421,7 +430,7 @@ export function Conversation() {
             ref={webcamRef}
             autoPlay
             muted
-            className="rounded-lg w-full h-64 object-cover bg-gray-200"
+            className="rounded-lg w-full h-100 object-cover bg-gray-200"
           />
         </div>
         {/* Kanha Card */}
@@ -432,12 +441,11 @@ export function Conversation() {
             <div className="flex-1 border-t-4 border-orange-500"></div>
           </div>
           <video
-            ref={agentVideoRef}
+            ref={agentCamRefMobile}
             src="/base-video.mp4"
             loop
             muted
-            playsInline
-            className="rounded-lg w-full h-64 object-cover object-top bg-yellow-100"
+            className="rounded-lg w-full h-100 object-cover object-top bg-yellow-100"
           />
         </div>
       </div>
@@ -450,7 +458,6 @@ export function Conversation() {
           src="/base-video.mp4"
           loop
           muted
-          playsInline
           className="w-full h-full object-cover object-top"
         />
         {/* User Camera Overlay */}
@@ -463,16 +470,27 @@ export function Conversation() {
           />
         </div>
       </div>
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      {downloadUrl && (
+            <a
+              href={downloadUrl}
+              download="conversation.webm"
+              className="
+                px-4 py-2
+                sm:px-6 sm:py-3
+                md:px-8 md:py-4
+                bg-green-600 hover:bg-green-700
+                text-white font-semibold rounded-lg shadow
+                transition-colors duration-200
+                text-base sm:text-lg md:text-xl
+                mobile-control-btn
+              "
+            >
+              Download
+            </a>
+          )}
 
-      {/* Suggested Questions */}
-      <div className="w-full max-w-md md:w-[720px] bg-orange-100 p-4 mt-[-12px] mx-auto md:mx-0 md:ml-12 md:rounded-xl whitespace-normal md:whitespace-nowrap">
-        <h3 className="text-lg font-semibold text-orange-700 mb-2">Suggested questions</h3>
-        <div className="flex flex-col gap-0.5">
-          <div className="border-b py-0.5">Kanha, tell me some stories from your childhood in Gokul?</div>
-          <div className="border-b py-0.5">When you steal maakhan does Yashoda Maa not get angry?</div>
-          <div className="py-0.5 mb-0">Kanha, who's your favourite gopi?</div>
-        </div>
-      </div>
+      
     </div>
   );
 }
